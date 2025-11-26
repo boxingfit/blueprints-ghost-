@@ -1,0 +1,23 @@
+{
+  "id": "ghost-custom",
+  "name": "Ghost CMS (Advanced)",
+  "version": "6.0-custom",
+  "description": "Ghost CMS with Redis sessions/jobs, Cloudflare R2 storage, Varnish cache, and NGINX reverse proxy. Production-ready stack.",
+  "logo": "ghost.svg",
+  "links": {
+    "github": "https://github.com/TryGhost/Ghost",
+    "website": "https://ghost.org/",
+    "docs": "https://ghost.org/docs/"
+  },
+  "tags": [
+    "cms",
+    "blog",
+    "publishing",
+    "nodejs",
+    "mysql",
+    "redis",
+    "cache",
+    "r2",
+    "cloudflare"
+  ]
+}
