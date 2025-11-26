@@ -10,10 +10,10 @@ services:
     ports:
       - 3306
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-changeme}
       - MYSQL_DATABASE=ghost
       - MYSQL_USER=ghost
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-changeme}
     volumes:
       - db:/var/lib/mysql
     command:
@@ -23,13 +23,14 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "ghost", "-p${MYSQL_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   # ============================================
-  # REDIS - Cache + Sessions + Jobs
+  # REDIS - Cache + Sessions
   # ============================================
   redis:
     image: redis:7-alpine
@@ -43,8 +44,6 @@ services:
       --appendonly yes
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
-      --save 900 1
-      --save 300 10
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -71,28 +70,31 @@ services:
       - database__client=mysql
       - database__connection__host=db
       - database__connection__user=ghost
-      - database__connection__password=${MYSQL_PASSWORD}
+      - database__connection__password=${MYSQL_PASSWORD:-changeme}
       - database__connection__database=ghost
       
-      # Redis (via config.production.json)
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      # Redis Cache
+      - adapters__cache__Redis__host=redis
+      - adapters__cache__Redis__port=6379
+      - adapters__cache__Redis__db=0
       
-      # Mail
+      # Mail SMTP
       - mail__transport=SMTP
-      - mail__options__service=${MAIL_SERVICE:-Mailgun}
       - mail__options__host=${MAIL_HOST}
       - mail__options__port=${MAIL_PORT:-587}
       - mail__options__auth__user=${MAIL_USER}
       - mail__options__auth__pass=${MAIL_PASSWORD}
       - mail__from=${MAIL_FROM}
       
-      # Cloudflare R2 (optionnel)
-      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
-      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
-      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
-      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
-      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+      # Cloudflare R2 Storage (optionnel)
+      - storage__active=s3-compatible
+      - storage__s3-compatible__accessKeyId=${R2_ACCESS_KEY_ID}
+      - storage__s3-compatible__secretAccessKey=${R2_SECRET_ACCESS_KEY}
+      - storage__s3-compatible__bucket=${R2_BUCKET_NAME}
+      - storage__s3-compatible__region=auto
+      - storage__s3-compatible__endpoint=https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      - storage__s3-compatible__forcePathStyle=true
+      - storage__s3-compatible__assetHost=https://${R2_PUBLIC_URL}
       
     volumes:
       - ghost:/var/lib/ghost/content
