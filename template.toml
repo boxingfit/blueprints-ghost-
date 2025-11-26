@@ -1,15 +1,14 @@
 # ============================================
-# GHOST CMS 6.0 CUSTOM - TEMPLATE DOKPLOY
-# Avec Redis Sessions, Job Queue & R2 Storage
+# GHOST CMS 6.0 ADVANCED - DOKPLOY TEMPLATE
+# Redis Cache + Sessions + R2 Storage
 # ============================================
 
-# --- VARIABLES ---
 [variables]
 main_domain = "${domain}"
 mysql_root_password = "${password:32}"
 mysql_password = "${password:32}"
 
-# Mail (Mailgun par défaut)
+# Mail SMTP (Mailgun par défaut)
 mail_service = "Mailgun"
 mail_host = "smtp.mailgun.org"
 mail_port = "587"
@@ -17,25 +16,16 @@ mail_user = ""
 mail_password = ""
 mail_from = "noreply@${domain}"
 
-# Cloudflare R2 (Optionnel)
+# Cloudflare R2 (Optionnel - laisser vide pour stockage local)
 r2_access_key_id = ""
 r2_secret_access_key = ""
 r2_bucket_name = ""
 r2_account_id = ""
 r2_public_url = ""
 
-# --- CONFIGURATION ---
 [config]
-
-# --- DOMAINES ---
-[[config.domains]]
-serviceName = "varnish"
-port = 80
-host = "${main_domain}"
-path = "/"
-
 env = [
-    "GHOST_DOMAIN=${main_domain}",
+    "GHOST_HOST=${main_domain}",
     "MYSQL_ROOT_PASSWORD=${mysql_root_password}",
     "MYSQL_PASSWORD=${mysql_password}",
     "MAIL_SERVICE=${mail_service}",
@@ -51,7 +41,11 @@ env = [
     "R2_PUBLIC_URL=${r2_public_url}"
 ]
 
-# --- MOUNTS (Fichiers de configuration) ---
+[[config.domains]]
+serviceName = "ghost"
+port = 2368
+host = "${main_domain}"
+path = "/"
 
 # ============================================
 # GHOST CONFIG - config.production.json
@@ -68,7 +62,7 @@ content = """
   "database": {
     "client": "mysql",
     "connection": {
-      "host": "mysql",
+      "host": "db",
       "port": 3306,
       "user": "ghost",
       "password": "${mysql_password}",
@@ -78,8 +72,7 @@ content = """
     "pool": {
       "min": 2,
       "max": 10
-    },
-    "debug": false
+    }
   },
   "mail": {
     "transport": "SMTP",
@@ -123,10 +116,10 @@ content = """
       "port": 6379,
       "db": 2
     },
-    "queues": ["email", "webhook", "slack"]
+    "queues": ["email", "webhook"]
   },
   "storage": {
-    "active": "s3-compatible",
+    "active": "${r2_bucket_name ? 's3-compatible' : 'LocalFileStorage'}",
     "s3-compatible": {
       "accessKeyId": "${r2_access_key_id}",
       "secretAccessKey": "${r2_secret_access_key}",
@@ -135,7 +128,7 @@ content = """
       "endpoint": "https://${r2_account_id}.r2.cloudflarestorage.com",
       "forcePathStyle": true,
       "signatureVersion": "v4",
-      "assetHost": "https://${r2_public_url}",
+      "assetHost": "${r2_public_url ? 'https://' + r2_public_url : ''}",
       "pathPrefix": ""
     }
   },
@@ -162,26 +155,6 @@ content = """
       "minWait": 1,
       "maxWait": 604800,
       "freeRetries": 5
-    },
-    "user_reset": {
-      "minWait": 3600,
-      "maxWait": 3600,
-      "lifetime": 3600
-    },
-    "global_reset": {
-      "minWait": 3600,
-      "maxWait": 3600,
-      "lifetime": 3600
-    },
-    "global_block": {
-      "minWait": 3600,
-      "maxWait": 604800,
-      "freeRetries": 99
-    },
-    "private_block": {
-      "minWait": 3600,
-      "maxWait": 604800,
-      "freeRetries": 99
     }
   },
   "paths": {
@@ -189,8 +162,8 @@ content = """
   },
   "privacy": {
     "useRpcPing": false,
-    "useUpdateCheck": false,
-    "useGravatar": false
+    "useUpdateCheck": true,
+    "useGravatar": true
   },
   "useMinFiles": true,
   "caching": {
@@ -217,403 +190,5 @@ content = """
   "schedulers": {
     "timezone": "Etc/UTC"
   }
-}
-"""
-
-# ============================================
-# NGINX Configuration
-# ============================================
-[[config.mounts]]
-filePath = "/etc/nginx/nginx.conf"
-content = """
-user nginx;
-worker_processes auto;
-error_log /var/log/nginx/error.log warn;
-pid /var/run/nginx.pid;
-
-events {
-    worker_connections 4096;
-    use epoll;
-    multi_accept on;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    # Logging
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent" "$http_x_forwarded_for" '
-                    'rt=$request_time uct="$upstream_connect_time" '
-                    'uht="$upstream_header_time" urt="$upstream_response_time"';
-    
-    access_log /var/log/nginx/access.log main buffer=32k flush=5s;
-
-    # Performance
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 65;
-    keepalive_requests 100;
-    types_hash_max_size 2048;
-    server_tokens off;
-    
-    # Buffer sizes
-    client_body_buffer_size 128k;
-    client_max_body_size 50M;
-    client_header_buffer_size 1k;
-    large_client_header_buffers 4 16k;
-
-    # Timeouts
-    client_body_timeout 12s;
-    client_header_timeout 12s;
-    send_timeout 10s;
-
-    # Compression
-    gzip on;
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_min_length 1000;
-    gzip_types 
-        text/plain 
-        text/css 
-        text/xml 
-        text/javascript 
-        application/json 
-        application/javascript 
-        application/x-javascript
-        application/xml 
-        application/xml+rss 
-        application/rss+xml 
-        font/truetype 
-        font/opentype 
-        application/vnd.ms-fontobject 
-        image/svg+xml
-        image/x-icon;
-    gzip_disable "msie6";
-
-    # Open file cache
-    open_file_cache max=10000 inactive=30s;
-    open_file_cache_valid 60s;
-    open_file_cache_min_uses 2;
-    open_file_cache_errors on;
-
-    # Upstream Ghost
-    upstream ghost_backend {
-        server ghost:2368 max_fails=3 fail_timeout=30s;
-        keepalive 32;
-    }
-
-    server {
-        listen 8080;
-        server_name _;
-
-        # Security Headers
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-XSS-Protection "1; mode=block" always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
-
-        # Admin Panel & API (no cache, WebSocket support)
-        location ~ ^/(ghost|api|members|p)/ {
-            proxy_pass http://ghost_backend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            
-            # WebSocket support
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            
-            proxy_buffering off;
-            proxy_cache_bypass 1;
-            proxy_no_cache 1;
-            
-            proxy_connect_timeout 60s;
-            proxy_send_timeout 60s;
-            proxy_read_timeout 60s;
-        }
-
-        # Static Assets from R2 (si utilisé, sinon fallback vers Ghost)
-        location ~* ^/content/(images|media|files)/ {
-            # Try local first (pour preview), puis Ghost backend
-            proxy_pass http://ghost_backend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-            add_header X-Content-Source "R2-via-Ghost" always;
-            access_log off;
-        }
-
-        # Theme Assets (CSS, JS, Fonts)
-        location ~* ^/assets/ {
-            proxy_pass http://ghost_backend;
-            proxy_set_header Host $host;
-            
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-            access_log off;
-        }
-
-        # Public Assets
-        location ~* ^/public/ {
-            proxy_pass http://ghost_backend;
-            proxy_set_header Host $host;
-            
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-            access_log off;
-        }
-
-        # Favicon, Robots, Sitemap
-        location ~* ^/(favicon\.ico|robots\.txt|sitemap.*\.xml)$ {
-            proxy_pass http://ghost_backend;
-            proxy_set_header Host $host;
-            
-            expires 1d;
-            add_header Cache-Control "public";
-            access_log off;
-        }
-
-        # Default (HTML pages)
-        location / {
-            proxy_pass http://ghost_backend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            
-            # Connection reuse
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-        }
-
-        # Health check endpoint
-        location /health {
-            access_log off;
-            return 200 "healthy\n";
-            add_header Content-Type text/plain;
-        }
-    }
-}
-"""
-
-# ============================================
-# VARNISH Configuration (VCL 4.1)
-# ============================================
-[[config.mounts]]
-filePath = "/etc/varnish/default.vcl"
-content = """
-vcl 4.1;
-
-import std;
-
-backend default {
-    .host = "nginx";
-    .port = "8080";
-    .connect_timeout = 5s;
-    .first_byte_timeout = 60s;
-    .between_bytes_timeout = 10s;
-    .max_connections = 300;
-    
-    .probe = {
-        .url = "/health";
-        .timeout = 2s;
-        .interval = 5s;
-        .window = 5;
-        .threshold = 3;
-    }
-}
-
-acl purge {
-    "localhost";
-    "127.0.0.1";
-    "::1";
-    "nginx";
-    "ghost";
-}
-
-sub vcl_recv {
-    # Handle PURGE requests
-    if (req.method == "PURGE") {
-        if (client.ip !~ purge) {
-            return (synth(403, "Not allowed"));
-        }
-        return (purge);
-    }
-
-    # Only cache GET and HEAD
-    if (req.method != "GET" && req.method != "HEAD") {
-        return (pass);
-    }
-
-    # Never cache admin, API, members
-    if (req.url ~ "^/(ghost|api|members|p)/") {
-        return (pass);
-    }
-
-    # Never cache if logged in (admin session cookie)
-    if (req.http.Cookie ~ "ghost-admin-api-session") {
-        return (pass);
-    }
-
-    # Remove tracking parameters
-    if (req.url ~ "(\?|&)(utm_source|utm_medium|utm_campaign|utm_content|gclid|fbclid|_ga)=") {
-        set req.url = regsuball(req.url, "(utm_source|utm_medium|utm_campaign|utm_content|gclid|fbclid|_ga)=[^&]+&?", "");
-        set req.url = regsub(req.url, "(\?|&)$", "");
-    }
-
-    # Remove cookies for static assets
-    if (req.url ~ "\.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot|webp|mp4|webm)$") {
-        unset req.http.Cookie;
-    }
-
-    # Normalize Accept-Encoding
-    if (req.http.Accept-Encoding) {
-        if (req.url ~ "\.(jpg|jpeg|png|gif|gz|tgz|bz2|tbz|mp3|ogg|swf|woff|woff2|pdf)$") {
-            unset req.http.Accept-Encoding;
-        } elsif (req.http.Accept-Encoding ~ "gzip") {
-            set req.http.Accept-Encoding = "gzip";
-        } elsif (req.http.Accept-Encoding ~ "deflate") {
-            set req.http.Accept-Encoding = "deflate";
-        } else {
-            unset req.http.Accept-Encoding;
-        }
-    }
-
-    return (hash);
-}
-
-sub vcl_hash {
-    hash_data(req.url);
-    
-    if (req.http.host) {
-        hash_data(req.http.host);
-    } else {
-        hash_data(server.ip);
-    }
-    
-    return (lookup);
-}
-
-sub vcl_backend_response {
-    # Don't cache errors
-    if (beresp.status >= 500) {
-        set beresp.uncacheable = true;
-        return (deliver);
-    }
-
-    # Set grace period (serve stale while fetching)
-    set beresp.grace = 6h;
-
-    # Cache homepage 10 minutes
-    if (bereq.url == "/") {
-        set beresp.ttl = 10m;
-    }
-    # Cache posts/pages 10 minutes
-    elsif (bereq.url ~ "^/[^/]+/$" || bereq.url ~ "\.html$") {
-        set beresp.ttl = 10m;
-    }
-    # Cache tags/authors 5 minutes
-    elsif (bereq.url ~ "^/(tag|author)/") {
-        set beresp.ttl = 5m;
-    }
-    # Cache RSS 15 minutes
-    elsif (bereq.url ~ "^/rss/") {
-        set beresp.ttl = 15m;
-    }
-    # Cache sitemap 1 hour
-    elsif (bereq.url ~ "sitemap.*\.xml$") {
-        set beresp.ttl = 1h;
-    }
-    # Cache static assets 1 day
-    elsif (bereq.url ~ "\.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot|webp)$") {
-        set beresp.ttl = 1d;
-        unset beresp.http.Set-Cookie;
-    }
-    # Default cache 5 minutes
-    else {
-        set beresp.ttl = 5m;
-    }
-
-    # Remove cookies from cacheable content
-    if (beresp.ttl > 0s) {
-        unset beresp.http.Set-Cookie;
-    }
-
-    return (deliver);
-}
-
-sub vcl_deliver {
-    # Add cache status header
-    if (obj.hits > 0) {
-        set resp.http.X-Cache = "HIT";
-        set resp.http.X-Cache-Hits = obj.hits;
-    } else {
-        set resp.http.X-Cache = "MISS";
-    }
-
-    # Add age header
-    set resp.http.X-Cache-Age = resp.http.Age;
-
-    # Remove internal headers
-    unset resp.http.Via;
-    unset resp.http.X-Varnish;
-    unset resp.http.Age;
-
-    return (deliver);
-}
-
-sub vcl_hit {
-    # Serve stale content if backend is down
-    if (obj.ttl >= 0s) {
-        return (deliver);
-    }
-    
-    if (std.healthy(req.backend_hint)) {
-        if (obj.ttl + obj.grace > 0s) {
-            return (deliver);
-        } else {
-            return (restart);
-        }
-    } else {
-        return (deliver);
-    }
-}
-
-sub vcl_backend_error {
-    # Serve stale content on backend error
-    if (bereq.is_bgfetch) {
-        return (abandon);
-    }
-    
-    set beresp.http.Content-Type = "text/html; charset=utf-8";
-    set beresp.status = 503;
-    synthetic({"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Service Temporarily Unavailable</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-        h1 { color: #555; }
-    </style>
-</head>
-<body>
-    <h1>Service Temporarily Unavailable</h1>
-    <p>We're experiencing technical difficulties. Please try again in a moment.</p>
-</body>
-</html>
-    "});
-    
-    return (deliver);
 }
 """
