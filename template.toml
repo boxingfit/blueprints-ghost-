@@ -1,6 +1,6 @@
 # ============================================
-# GHOST CMS 6.0 ADVANCED - DOKPLOY TEMPLATE
-# Redis Cache + Sessions + R2 Storage
+# GHOST CMS 6.0 ADVANCED
+# Redis Cache + MySQL + R2 Storage optionnel
 # ============================================
 
 [variables]
@@ -8,15 +8,14 @@ main_domain = "${domain}"
 mysql_root_password = "${password:32}"
 mysql_password = "${password:32}"
 
-# Mail SMTP (Mailgun par défaut)
-mail_service = "Mailgun"
-mail_host = "smtp.mailgun.org"
+# Mail SMTP (optionnel)
+mail_host = ""
 mail_port = "587"
 mail_user = ""
 mail_password = ""
-mail_from = "noreply@${domain}"
+mail_from = ""
 
-# Cloudflare R2 (Optionnel - laisser vide pour stockage local)
+# Cloudflare R2 (optionnel)
 r2_access_key_id = ""
 r2_secret_access_key = ""
 r2_bucket_name = ""
@@ -28,7 +27,6 @@ env = [
     "GHOST_HOST=${main_domain}",
     "MYSQL_ROOT_PASSWORD=${mysql_root_password}",
     "MYSQL_PASSWORD=${mysql_password}",
-    "MAIL_SERVICE=${mail_service}",
     "MAIL_HOST=${mail_host}",
     "MAIL_PORT=${mail_port}",
     "MAIL_USER=${mail_user}",
@@ -46,149 +44,3 @@ serviceName = "ghost"
 port = 2368
 host = "${main_domain}"
 path = "/"
-
-# ============================================
-# GHOST CONFIG - config.production.json
-# ============================================
-[[config.mounts]]
-filePath = "/var/lib/ghost/config.production.json"
-content = """
-{
-  "url": "https://${main_domain}",
-  "server": {
-    "port": 2368,
-    "host": "0.0.0.0"
-  },
-  "database": {
-    "client": "mysql",
-    "connection": {
-      "host": "db",
-      "port": 3306,
-      "user": "ghost",
-      "password": "${mysql_password}",
-      "database": "ghost",
-      "charset": "utf8mb4"
-    },
-    "pool": {
-      "min": 2,
-      "max": 10
-    }
-  },
-  "mail": {
-    "transport": "SMTP",
-    "options": {
-      "service": "${mail_service}",
-      "host": "${mail_host}",
-      "port": ${mail_port},
-      "auth": {
-        "user": "${mail_user}",
-        "pass": "${mail_password}"
-      }
-    },
-    "from": "${mail_from}"
-  },
-  "adapters": {
-    "cache": {
-      "Redis": {
-        "host": "redis",
-        "port": 6379,
-        "db": 0,
-        "retryStrategy": {
-          "retries": 10,
-          "minTimeout": 100,
-          "maxTimeout": 3000
-        }
-      }
-    },
-    "session": {
-      "adapter": "redis",
-      "host": "redis",
-      "port": 6379,
-      "db": 1,
-      "ttl": 2592000,
-      "prefix": "ghost:sess:"
-    }
-  },
-  "jobs": {
-    "adapter": "bull",
-    "redis": {
-      "host": "redis",
-      "port": 6379,
-      "db": 2
-    },
-    "queues": ["email", "webhook"]
-  },
-  "storage": {
-    "active": "${r2_bucket_name ? 's3-compatible' : 'LocalFileStorage'}",
-    "s3-compatible": {
-      "accessKeyId": "${r2_access_key_id}",
-      "secretAccessKey": "${r2_secret_access_key}",
-      "region": "auto",
-      "bucket": "${r2_bucket_name}",
-      "endpoint": "https://${r2_account_id}.r2.cloudflarestorage.com",
-      "forcePathStyle": true,
-      "signatureVersion": "v4",
-      "assetHost": "${r2_public_url ? 'https://' + r2_public_url : ''}",
-      "pathPrefix": ""
-    }
-  },
-  "imageOptimization": {
-    "resize": true,
-    "contentImageSizes": {
-      "w": 300,
-      "w": 600,
-      "w": 1000,
-      "w": 2000
-    }
-  },
-  "logging": {
-    "level": "info",
-    "rotation": {
-      "enabled": true,
-      "count": 10,
-      "period": "1w"
-    },
-    "transports": ["stdout"]
-  },
-  "spam": {
-    "user_login": {
-      "minWait": 1,
-      "maxWait": 604800,
-      "freeRetries": 5
-    }
-  },
-  "paths": {
-    "contentPath": "/var/lib/ghost/content"
-  },
-  "privacy": {
-    "useRpcPing": false,
-    "useUpdateCheck": true,
-    "useGravatar": true
-  },
-  "useMinFiles": true,
-  "caching": {
-    "frontend": {
-      "maxAge": 0
-    },
-    "301": {
-      "maxAge": 31536000
-    },
-    "customRedirects": {
-      "maxAge": 31536000
-    },
-    "favicon": {
-      "maxAge": 86400
-    },
-    "sitemap": {
-      "maxAge": 3600
-    },
-    "robotstxt": {
-      "maxAge": 3600
-    }
-  },
-  "compress": true,
-  "schedulers": {
-    "timezone": "Etc/UTC"
-  }
-}
-"""
